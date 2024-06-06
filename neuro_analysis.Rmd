@@ -1,0 +1,266 @@
+---
+title: "Neuro_analysis"
+output: html_document
+date: "2024-05-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# loading packages
+
+library(tidyverse)
+
+```
+
+```{r}
+# load in data files
+data_shape = read_csv("~/Desktop/EEG_data_Neuro/data_shape.csv")
+data_color = read_csv("~/Desktop/EEG_data_Neuro/data_color.csv")
+data_joint = read_csv("~/Desktop/EEG_data_Neuro/data_joint.csv")
+```
+
+```{r}
+# Add a condition column to the data_shape data frame
+data_shape <- data_shape %>%
+  mutate(condition = "shape")
+# Add a condition column to the data_shape data frame
+data_color <- data_color %>%
+  mutate(condition = "color")
+# Add a condition column to the data_shape data frame
+data_joint <- data_joint %>%
+  mutate(condition = "joint")
+
+# Rename the column "data_shape" to "trial"
+data_shape <- data_shape %>%
+  rename(trial = data_shape)
+# Rename the column "data_shape" to "trial"
+data_color <- data_color %>%
+  rename(trial = data_color)
+# Rename the column "data_shape" to "trial"
+data_joint <- data_joint %>%
+  rename(trial = data_joint)
+
+# Bind the two data frames
+combined_df <- bind_rows(data_shape, data_color, data_joint)
+
+
+```
+
+
+```{r}
+ggplot(combined_df, aes(x = trial, color=condition)) +
+  geom_density() +
+  labs(title = "Density Plot of Values", x = "Value", y = "Density") +
+  theme_minimal()
+```
+
+```{r}
+# load in data files
+data_time_shape = read_csv("~/Desktop/EEG_data_Neuro/data_time_shape.csv")
+data_time_color = read_csv("~/Desktop/EEG_data_Neuro/data_time_color.csv")
+data_time_joint = read_csv("~/Desktop/EEG_data_Neuro/data_time_joint.csv")
+
+# Add a condition column to the data_shape data frame
+data_time_shape <- data_time_shape %>%
+  mutate(condition = "shape")
+# Add a condition column to the data_shape data frame
+data_time_color <- data_time_color %>%
+  mutate(condition = "color")
+# Add a condition column to the data_shape data frame
+data_time_joint <- data_time_joint %>%
+  mutate(condition = "joint")
+
+# Rename the column "data_shape" to "trial"
+data_time_shape <- data_time_shape %>%
+  rename(trial = data_shape)
+# Rename the column "data_shape" to "trial"
+data_time_color <- data_time_color %>%
+  rename(trial = data_color)
+# Rename the column "data_shape" to "trial"
+data_time_joint <- data_time_joint %>%
+  rename(trial = data_joint)
+
+
+
+# Bind the two data frames
+combined_df2 <- bind_rows(data_time_shape, data_time_color, data_time_joint)
+
+# Transform level_0 to realtime
+combined_df2 <- combined_df2 %>%
+  mutate(realtime = 0.3 + (level_0 / 50) * (0.5 - 0.3))
+```
+```{r}
+
+
+ggplot(combined_df2, aes(x = realtime,y=trial, color=condition)) +
+  geom_line() +
+  labs(title = "Temporal plot of Central lobe", x = "Time in Seconds", y = "µV") +
+  theme_minimal()
+```
+
+
+```{r}
+# Fit the linear model with condition as a predictor of trial
+model1 <- lm(trial ~ realtime *as.factor(condition), data = combined_df2)
+
+# Summarize the model
+summary(model1)
+```
+
+```{r}
+lm()
+# Create the plot with the fitted model
+ggplot(combined_df2, aes(x = realtime, y = trial, color = condition)) +
+  geom_line() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Temporal plot of channels (FC1, FC2, and Cz) with linear model fitted", x = "Realtime (s)", y = "V") +
+  theme_minimal()
+```
+
+```{r}
+# Fit a polynomial model with degree 2
+model_poly <- lm(trial ~ as.factor(condition) + poly(realtime, 2) * as.factor(condition), data = combined_df2)
+
+# Summarize the model
+summary(model_poly)
+
+# Create the plot with the polynomial model
+ggplot(combined_df2, aes(x = realtime, y = trial, color = condition)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ poly(x, 2), se = FALSE) +
+  labs(title = "Polynomial Model of Trials over Real Time", x = "Realtime (s)", y = "Trial") +
+  theme_minimal()
+```
+
+```{r}
+# Fit the sinusoidal model for each condition
+fit_sinusoidal <- function(data) {
+  initial_params <- c(1, 1, 0)  # Starting values for parameters a, b, c
+  fitted_params <- optim(initial_params, loss, x = data$realtime, y = data$trial)$par
+  fitted_params
+}
+
+# Fit sinusoidal model for each condition
+model_params <- combined_df2 %>%
+  group_by(condition) %>%
+  summarize(params = list(fit_sinusoidal(.)))
+
+# Create a new dataframe with expanded realtime values for smoother curves
+new_data <- expand.grid(realtime = seq(min(combined_df2$realtime), max(combined_df2$realtime), length.out = 100))
+
+# Add condition to new dataframe
+new_data <- merge(new_data, distinct(combined_df2[, "condition", drop = TRUE]))
+
+# Predict trials using sinusoidal model for each condition
+new_data <- new_data %>%
+  left_join(model_params, by = "condition") %>%
+  mutate(trial = sin_model(params, realtime))
+
+# Create the plot with the sinusoidal model
+ggplot(combined_df2, aes(x = realtime, y = trial, color = condition)) +
+  geom_point() +
+  geom_line(data = new_data, aes(x = realtime, y = trial)) +
+  labs(title = "Sinusoidal Model of Trials over Real Time", x = "Realtime (s)", y = "Trial") +
+  theme_minimal()
+
+
+```
+
+
+```{r}
+# load in data files
+data_time_easy = read_csv("~/Desktop/EEG_data_Neuro/data_time_easy.csv")
+data_time_medium = read_csv("~/Desktop/EEG_data_Neuro/data_time_medium.csv")
+data_time_hard = read_csv("~/Desktop/EEG_data_Neuro/data_time_hard.csv")
+
+# Add a condition column to the data_shape data frame
+data_time_easy <- data_time_easy %>%
+  mutate(difficulty = "easy")
+# Add a condition column to the data_shape data frame
+data_time_medium <- data_time_medium %>%
+  mutate(difficulty = "medium")
+# Add a condition column to the data_shape data frame
+data_time_hard <- data_time_hard %>%
+  mutate(difficulty = "hard")
+
+# Rename the column "data_shape" to "trial"
+data_time_easy <- data_time_easy %>%
+  rename(trial = data_easy)
+# Rename the column "data_shape" to "trial"
+data_time_medium <- data_time_medium %>%
+  rename(trial = data_medium)
+# Rename the column "data_shape" to "trial"
+data_time_hard <- data_time_hard %>%
+  rename(trial = data_hard)
+
+
+
+# Bind the two data frames
+combined_df3 <- bind_rows(data_time_easy, data_time_medium, data_time_hard)
+
+# Transform level_0 to realtime
+combined_df3 <- combined_df3 %>%
+  mutate(realtime = 0.3 + (level_0 / 50) * (0.5 - 0.3))
+```
+
+```{r}
+ggplot(combined_df3, aes(x = realtime,y=trial, color=difficulty)) +
+  geom_line() +
+  labs(title = "Temporal plot of Central lobe", x = "Time in Seconds", y = "µV") +
+  theme_minimal()
+```
+```{r}
+# Fit the linear model with condition as a predictor of trial
+model2 <- lm(trial ~ realtime *as.factor(difficulty), data = combined_df3)
+
+# Summarize the model
+summary(model2)
+```
+
+```{r}
+# load in data files
+data_time_shape = read_csv("~/Desktop/EEG_data_Neuro/data_vis_shape.csv")
+data_time_color = read_csv("~/Desktop/EEG_data_Neuro/data_vis_color.csv")
+data_time_joint = read_csv("~/Desktop/EEG_data_Neuro/data_vis_joint.csv")
+
+# Add a condition column to the data_shape data frame
+data_time_shape <- data_time_shape %>%
+  mutate(condition = "shape")
+# Add a condition column to the data_shape data frame
+data_time_color <- data_time_color %>%
+  mutate(condition = "color")
+# Add a condition column to the data_shape data frame
+data_time_joint <- data_time_joint %>%
+  mutate(condition = "joint")
+
+# Rename the column "data_shape" to "trial"
+data_time_shape <- data_time_shape %>%
+  rename(trial = data_shape)
+# Rename the column "data_shape" to "trial"
+data_time_color <- data_time_color %>%
+  rename(trial = data_color)
+# Rename the column "data_shape" to "trial"
+data_time_joint <- data_time_joint %>%
+  rename(trial = data_joint)
+
+
+
+# Bind the two data frames
+combined_df4 <- bind_rows(data_time_shape, data_time_color, data_time_joint)
+
+# Transform level_0 to realtime
+combined_df4 <- combined_df4 %>%
+  mutate(realtime = 0.1 + (level_0 / 50) * (0.3 - 0.1))
+```
+
+
+```{r}
+ggplot(combined_df4, aes(x = realtime,y=trial, color=condition)) +
+  geom_line() +
+  labs(title = "Temporal plot of visual cortex", x = "Time in Seconds", y = "µV") +
+  theme_minimal()
+```
+
